@@ -6,14 +6,12 @@ import {
   Activity,
   AlertTriangle,
   Brain,
+  Clock,
   Gauge,
   Sparkles,
+  TrendingUp,
   Wifi,
   WifiOff,
-  TrendingDown,
-  TrendingUp,
-  Minus,
-  Clock,
   Zap,
 } from "lucide-react";
 import { useBehaviorTracker } from "@/hooks/useBehaviorTracker";
@@ -30,9 +28,20 @@ type AnalysisResponse = {
   recommendation: string;
   metrics: {
     typing_speed: number;
+    typing_variance: number;
     error_rate: number;
     idle_time: number;
     reaction_delay: number;
+    speed_drop_rate: number;
+    error_acceleration: number;
+    idle_spike_score: number;
+    focus_stability_index: number;
+  };
+  history: Array<{ time: string; score: number }>;
+  forecast: {
+    next_scores: number[];
+    risk_direction: "up" | "down" | "stable";
+    message: string;
   };
 };
 
@@ -52,15 +61,11 @@ export default function Dashboard() {
           timeout: 5000,
         });
 
-        setIsOnline(true);
         setAnalysis(response.data);
-
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        setLastUpdated(timeStr);
-
-        setHistory((prev) => [...prev, { time: timeStr, score: response.data.focus_score }].slice(-15));
-      } catch (error) {
+        setHistory(response.data.history ?? []);
+        setIsOnline(true);
+        setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      } catch {
         setIsOnline(false);
       }
     };
@@ -76,35 +81,38 @@ export default function Dashboard() {
   }, [analysis]);
 
   return (
-    <main className="dashboard-shell min-h-screen px-4 py-8 md:px-8 bg-[#0a0c10] text-slate-200">
-      <div className="mx-auto max-w-6xl space-y-8">
-        <header className="glass-card rounded-2xl p-6 border border-white/5 bg-white/5 backdrop-blur-xl">
+    <main className="dashboard-shell min-h-screen bg-[#0a0c10] px-4 py-8 text-slate-200 md:px-8">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <header className="glass-card rounded-3xl p-6 md:p-7">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div className="flex items-center gap-4">
-              <div className="brand-orb grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/20">
+              <div className="brand-orb grid h-14 w-14 place-items-center rounded-2xl">
                 <Brain className="h-8 w-8 text-white" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold tracking-tight text-white">NeuroTrack AI</h1>
-                <p className="mt-1 text-sm text-slate-400 font-medium">Experimental Cognitive Load Analysis</p>
+                <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">NeuroTrack AI</h1>
+                <p className="mt-1 text-sm font-medium text-slate-300">Cognitive telemetry and fatigue prediction</p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3">
               <StatusPill
                 icon={isOnline ? Wifi : WifiOff}
-                label={isOnline ? "Live Stream" : "Disconnected"}
-                tone={isOnline ? "#10b981" : "#ef4444"}
+                label={isOnline ? "API Connected" : "API Offline"}
+                tone={isOnline ? "#34d399" : "#f43f5e"}
               />
-              <StatusPill
-                icon={Activity}
-                label={`Trend: ${analysis?.burnout_trend ?? "Analyzing"}`}
-                tone={analysis?.burnout_trend === "Declining" ? "#ef4444" : "#06b6d4"}
-              />
-              <div className="text-xs font-mono text-slate-500 bg-slate-900/50 px-3 py-1.5 rounded-full border border-white/5">
-                Last Sync: {lastUpdated}
+              <StatusPill icon={Gauge} label={`Risk: ${analysis?.burnout_risk_level ?? "Low"}`} tone={riskTone} />
+              <div className="rounded-full border border-white/15 bg-slate-900/60 px-3 py-1.5 font-mono text-xs text-slate-400">
+                {lastUpdated}
               </div>
             </div>
+          </div>
+
+          <div className="kpi-strip mt-5 grid gap-2 rounded-2xl p-2 md:grid-cols-4">
+            <KpiCard label="Focus" value={`${Math.round(analysis?.focus_score ?? 100)}%`} />
+            <KpiCard label="Typing" value={`${analysis?.metrics.typing_speed ?? 0} WPM`} />
+            <KpiCard label="Errors" value={`${((analysis?.metrics.error_rate ?? 0) * 100).toFixed(1)}%`} />
+            <KpiCard label="Stability" value={`${Math.round((analysis?.metrics.focus_stability_index ?? 0) * 100)}%`} />
           </div>
         </header>
 
@@ -112,76 +120,62 @@ export default function Dashboard() {
           <div className="space-y-6">
             <FocusMeter score={analysis?.focus_score ?? 100} risk={analysis?.burnout_risk_level ?? "Low"} />
 
-            <div className="glass-card rounded-2xl p-6 border border-white/5 bg-white/5 backdrop-blur-md">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4 flex items-center gap-2">
-                <Clock className="w-3 h-3" /> Predictive Timeline
+            <div className="glass-card rounded-3xl p-6">
+              <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                <Clock className="h-3 w-3" /> Forecast Window
               </h3>
-              <div className="space-y-4">
-                <TimelineStep
-                  time="Current"
-                  label="Baseline established"
-                  status="complete"
-                />
-                <TimelineStep
-                  time="+30m"
-                  label={analysis?.burnout_trend === "Declining" ? "High fatigue risk" : "Maintain current pace"}
-                  status={analysis?.burnout_trend === "Declining" ? "warning" : "pending"}
-                />
-                <TimelineStep
-                  time="+1h"
-                  label="Recommended rest window"
-                  status="pending"
-                />
+              <p className="rounded-xl border border-cyan-300/20 bg-cyan-950/20 p-3 text-sm text-cyan-100">
+                {analysis?.forecast.message ?? "Gathering session context for prediction..."}
+              </p>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {(analysis?.forecast.next_scores ?? [100, 100, 100]).map((score, index) => (
+                  <div key={index} className="metric-card rounded-xl p-2 text-center">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-400">+{(index + 1) * 10}s</p>
+                    <p className="font-mono text-lg font-semibold text-white">{Math.round(score)}%</p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
           <div className="space-y-6">
-            <div className="glass-card rounded-2xl p-6 border border-white/5 bg-white/5 backdrop-blur-xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-                <Sparkles className="w-32 h-32" />
+            <div className="glass-card relative overflow-hidden rounded-3xl p-6">
+              <div className="absolute right-0 top-0 p-8 opacity-10">
+                <Sparkles className="h-24 w-24" />
               </div>
 
-              <h2 className="flex items-center gap-2 text-xl font-bold text-white">
-                <Zap className="h-5 w-5 text-yellow-400 fill-yellow-400" />
-                Live Cognitive Insights
+              <h2 className="panel-title flex items-center gap-2 text-xl font-bold">
+                <Zap className="h-5 w-5 fill-amber-300 text-amber-300" /> Live AI Guidance
               </h2>
-              <p className="mt-4 text-lg text-slate-300 leading-relaxed max-w-2xl">
-                {analysis?.recommendation ??
-                  "Analyzing behavioral patterns. Focus score will calibrate after the next 10-second data window."}
+              <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-200">
+                {analysis?.recommendation ?? "Analyzing behavior stream. Insights refresh every 10 seconds."}
               </p>
 
-              <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4">
-                <MetricCard
-                  label="Typing Velocity"
-                  value={`${analysis?.metrics.typing_speed ?? 0}`}
-                  unit="WPM"
-                  icon={TrendingUp}
-                />
-                <MetricCard
-                  label="Error Density"
-                  value={`${((analysis?.metrics.error_rate ?? 0) * 100).toFixed(1)}`}
-                  unit="%"
-                  icon={AlertTriangle}
-                />
-                <MetricCard
-                  label="Idle Gap"
-                  value={`${analysis?.metrics.idle_time ?? 0}`}
-                  unit="%"
-                  icon={Minus}
-                />
-                <MetricCard
-                  label="Neural Delay"
-                  value={`${analysis?.metrics.reaction_delay ?? 0}`}
-                  unit="s"
-                  icon={Activity}
-                />
+              <div className="mt-7 grid grid-cols-2 gap-4 md:grid-cols-4">
+                <MetricCard label="Typing Speed" value={`${analysis?.metrics.typing_speed ?? 0}`} unit="WPM" icon={TrendingUp} />
+                <MetricCard label="Error Rate" value={`${((analysis?.metrics.error_rate ?? 0) * 100).toFixed(1)}`} unit="%" icon={AlertTriangle} />
+                <MetricCard label="Idle Time" value={`${analysis?.metrics.idle_time ?? 0}`} unit="%" icon={Activity} />
+                <MetricCard label="Reaction" value={`${analysis?.metrics.reaction_delay ?? 0}`} unit="s" icon={Clock} />
               </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <Chip label="Speed Drop" value={`${Math.round((analysis?.metrics.speed_drop_rate ?? 0) * 100)}%`} />
+                <Chip label="Error Accel" value={`${Math.round((analysis?.metrics.error_acceleration ?? 0) * 100)}%`} />
+                <Chip label="Idle Spikes" value={`${Math.round((analysis?.metrics.idle_spike_score ?? 0) * 100)}%`} />
+                <Chip label="Stability" value={`${Math.round((analysis?.metrics.focus_stability_index ?? 0) * 100)}%`} />
+              </div>
+
+              {!isOnline && (
+                <div className="mt-4 flex items-start gap-2 rounded-xl border border-rose-400/40 bg-rose-950/30 p-3 text-sm text-rose-100">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <p>
+                    Backend unreachable at <span className="font-mono">{BACKEND_URL}</span>. Start API first.
+                  </p>
+                </div>
+              )}
             </div>
 
-            <div className="glass-card rounded-2xl p-6 border border-white/5 bg-white/5 backdrop-blur-xl">
-              <FocusChart data={history} />
-            </div>
+            <FocusChart data={history} />
           </div>
         </section>
       </div>
@@ -189,48 +183,63 @@ export default function Dashboard() {
   );
 }
 
-function MetricCard({ label, value, unit, icon: Icon }: { label: string; value: string; unit: string; icon: any }) {
+function KpiCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-white/5 p-4 hover:bg-white/[0.08] transition-colors">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</p>
-        <Icon className="w-3 h-3 text-slate-600" />
+    <div className="rounded-xl border border-white/10 bg-slate-950/35 px-3 py-2">
+      <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">{label}</p>
+      <p className="mt-0.5 text-sm font-semibold text-slate-100">{value}</p>
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  unit,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  icon: ComponentType<{ className?: string }>;
+}) {
+  return (
+    <div className="metric-card rounded-2xl p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">{label}</p>
+        <Icon className="h-3.5 w-3.5 text-slate-400" />
       </div>
       <div className="flex items-baseline gap-1">
-        <p className="text-2xl font-bold text-white font-mono">{value}</p>
-        <p className="text-[10px] text-slate-500 font-medium">{unit}</p>
+        <p className="font-mono text-2xl font-bold text-white">{value}</p>
+        <p className="text-[10px] text-slate-400">{unit}</p>
       </div>
     </div>
   );
 }
 
-function StatusPill({ icon: Icon, label, tone }: { icon: any; label: string; tone: string }) {
+function StatusPill({
+  icon: Icon,
+  label,
+  tone,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  tone: string;
+}) {
   return (
-    <div className="flex items-center gap-2.5 rounded-full border border-white/5 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-300">
-      <span className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: tone }} />
-      <Icon className="h-4 w-4 opacity-70" />
+    <div className="flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/55 px-3 py-1.5 text-xs font-medium text-slate-100">
+      <span className="sparkline-dot h-2 w-2 rounded-full" style={{ backgroundColor: tone, color: tone }} />
+      <Icon className="h-3.5 w-3.5 opacity-80" />
       <span>{label}</span>
     </div>
   );
 }
 
-function TimelineStep({ time, label, status }: { time: string; label: string; status: 'complete' | 'warning' | 'pending' }) {
-  const dotColor = {
-    complete: 'bg-cyan-500',
-    warning: 'bg-rose-500',
-    pending: 'bg-slate-700'
-  }[status];
-
+function Chip({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-start gap-4">
-      <div className="flex flex-col items-center gap-1 mt-1">
-        <div className={`h-2.5 w-2.5 rounded-full ${dotColor}`} />
-        <div className="h-8 w-px bg-slate-800" />
-      </div>
-      <div>
-        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{time}</p>
-        <p className={`text-xs font-medium ${status === 'warning' ? 'text-rose-400' : 'text-slate-300'}`}>{label}</p>
-      </div>
+    <div className="rounded-xl border border-white/12 bg-slate-900/35 px-3 py-2">
+      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-100">{value}</p>
     </div>
   );
 }

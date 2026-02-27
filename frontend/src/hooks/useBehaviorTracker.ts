@@ -15,9 +15,11 @@ export interface BehavioralBatch {
 export const useBehaviorTracker = (intervalMs: number = 10000) => {
     const [batch, setBatch] = useState<BehavioralBatch | null>(null);
     const eventsRef = useRef<RawEvent[]>([]);
-    const startTimeRef = useRef<number>(Date.now());
+    const startTimeRef = useRef<number>(0);
 
     useEffect(() => {
+        startTimeRef.current = Date.now();
+
         const handleKeyDown = (e: KeyboardEvent) => {
             eventsRef.current.push({
                 type: 'keydown',
@@ -29,7 +31,6 @@ export const useBehaviorTracker = (intervalMs: number = 10000) => {
         let lastMouseMove = 0;
         const handleMouseMove = () => {
             const now = Date.now();
-            // Throttle mouse moves to avoid overwhelming the batch
             if (now - lastMouseMove > 100) {
                 eventsRef.current.push({
                     type: 'mousemove',
@@ -55,7 +56,7 @@ export const useBehaviorTracker = (intervalMs: number = 10000) => {
                 setBatch({
                     events: currentEvents,
                     durationMs: duration,
-                    startTime: startTime,
+                    startTime,
                 });
             }
         }, intervalMs);
