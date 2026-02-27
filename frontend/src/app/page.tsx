@@ -10,6 +10,11 @@ import {
   Sparkles,
   Wifi,
   WifiOff,
+  TrendingDown,
+  TrendingUp,
+  Minus,
+  Clock,
+  Zap,
 } from "lucide-react";
 import { useBehaviorTracker } from "@/hooks/useBehaviorTracker";
 import FocusMeter from "@/components/FocusMeter";
@@ -21,23 +26,29 @@ type AnalysisResponse = {
   fatigue_probability: number;
   focus_score: number;
   burnout_risk_level: "Low" | "Medium" | "High";
+  burnout_trend: "Improving" | "Declining" | "Stable";
   recommendation: string;
+  metrics: {
+    typing_speed: number;
+    error_rate: number;
+    idle_time: number;
+    reaction_delay: number;
+  };
 };
 
 export default function Dashboard() {
-  const metrics = useBehaviorTracker(8000);
+  const batch = useBehaviorTracker(10000);
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
   const [history, setHistory] = useState<Array<{ time: string; score: number }>>([]);
   const [isOnline, setIsOnline] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string>("--:--");
 
   useEffect(() => {
-    const hasSignal = metrics.typing_speed > 0 || metrics.idle_time < 90;
-    if (!hasSignal) return;
+    if (!batch) return;
 
     const sendData = async () => {
       try {
-        const response = await axios.post<AnalysisResponse>(`${BACKEND_URL}/analyze`, metrics, {
+        const response = await axios.post<AnalysisResponse>(`${BACKEND_URL}/analyze`, batch, {
           timeout: 5000,
         });
 
@@ -55,7 +66,7 @@ export default function Dashboard() {
     };
 
     void sendData();
-  }, [metrics]);
+  }, [batch]);
 
   const riskTone = useMemo(() => {
     const risk = analysis?.burnout_risk_level ?? "Low";
@@ -65,97 +76,161 @@ export default function Dashboard() {
   }, [analysis]);
 
   return (
-    <main className="dashboard-shell min-h-screen px-4 py-8 md:px-8">
+    <main className="dashboard-shell min-h-screen px-4 py-8 md:px-8 bg-[#0a0c10] text-slate-200">
       <div className="mx-auto max-w-6xl space-y-8">
-        <header className="glass-card rounded-2xl p-5 md:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="brand-orb grid h-12 w-12 place-items-center rounded-xl">
-                <Brain className="h-7 w-7 text-white" />
+        <header className="glass-card rounded-2xl p-6 border border-white/5 bg-white/5 backdrop-blur-xl">
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <div className="brand-orb grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/20">
+                <Brain className="h-8 w-8 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">NeuroTrack AI</h1>
-                <p className="mt-1 text-sm text-slate-300">Real-time cognitive workload dashboard</p>
+                <h1 className="text-3xl font-bold tracking-tight text-white">NeuroTrack AI</h1>
+                <p className="mt-1 text-sm text-slate-400 font-medium">Experimental Cognitive Load Analysis</p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-xs md:text-sm">
+            <div className="flex flex-wrap items-center gap-4">
               <StatusPill
                 icon={isOnline ? Wifi : WifiOff}
-                label={isOnline ? "API Connected" : "API Disconnected"}
-                tone={isOnline ? "var(--success)" : "var(--danger)"}
+                label={isOnline ? "Live Stream" : "Disconnected"}
+                tone={isOnline ? "#10b981" : "#ef4444"}
               />
               <StatusPill
-                icon={Gauge}
-                label={`Risk ${analysis?.burnout_risk_level ?? "Low"}`}
-                tone={riskTone}
+                icon={Activity}
+                label={`Trend: ${analysis?.burnout_trend ?? "Analyzing"}`}
+                tone={analysis?.burnout_trend === "Declining" ? "#ef4444" : "#06b6d4"}
               />
-              <StatusPill icon={Activity} label={`Updated ${lastUpdated}`} tone="var(--accent-cyan)" />
+              <div className="text-xs font-mono text-slate-500 bg-slate-900/50 px-3 py-1.5 rounded-full border border-white/5">
+                Last Sync: {lastUpdated}
+              </div>
             </div>
           </div>
         </header>
 
-        <section className="grid gap-6 lg:grid-cols-[320px,1fr]">
-          <FocusMeter score={analysis?.focus_score ?? 100} risk={analysis?.burnout_risk_level ?? "Low"} />
+        <section className="grid gap-6 lg:grid-cols-[340px,1fr]">
+          <div className="space-y-6">
+            <FocusMeter score={analysis?.focus_score ?? 100} risk={analysis?.burnout_risk_level ?? "Low"} />
 
-          <div className="glass-card rounded-2xl p-5 md:p-6">
-            <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-100">
-              <Sparkles className="h-5 w-5 text-cyan-300" />
-              AI Recommendation
-            </h2>
-            <p className="mt-3 rounded-xl border border-white/10 bg-slate-900/40 p-4 text-slate-200">
-              {analysis?.recommendation ??
-                "Start typing or moving your mouse. Insights will appear here after the first analysis cycle."}
-            </p>
+            <div className="glass-card rounded-2xl p-6 border border-white/5 bg-white/5 backdrop-blur-md">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4 flex items-center gap-2">
+                <Clock className="w-3 h-3" /> Predictive Timeline
+              </h3>
+              <div className="space-y-4">
+                <TimelineStep
+                  time="Current"
+                  label="Baseline established"
+                  status="complete"
+                />
+                <TimelineStep
+                  time="+30m"
+                  label={analysis?.burnout_trend === "Declining" ? "High fatigue risk" : "Maintain current pace"}
+                  status={analysis?.burnout_trend === "Declining" ? "warning" : "pending"}
+                />
+                <TimelineStep
+                  time="+1h"
+                  label="Recommended rest window"
+                  status="pending"
+                />
+              </div>
+            </div>
+          </div>
 
-            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <MetricCard label="Typing Speed" value={`${metrics.typing_speed} WPM`} />
-              <MetricCard label="Error Rate" value={`${(metrics.error_rate * 100).toFixed(1)}%`} />
-              <MetricCard label="Idle Window" value={`${metrics.idle_time}%`} />
-              <MetricCard label="Reaction Delay" value={`${metrics.reaction_delay}s`} />
+          <div className="space-y-6">
+            <div className="glass-card rounded-2xl p-6 border border-white/5 bg-white/5 backdrop-blur-xl relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+                <Sparkles className="w-32 h-32" />
+              </div>
+
+              <h2 className="flex items-center gap-2 text-xl font-bold text-white">
+                <Zap className="h-5 w-5 text-yellow-400 fill-yellow-400" />
+                Live Cognitive Insights
+              </h2>
+              <p className="mt-4 text-lg text-slate-300 leading-relaxed max-w-2xl">
+                {analysis?.recommendation ??
+                  "Analyzing behavioral patterns. Focus score will calibrate after the next 10-second data window."}
+              </p>
+
+              <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4">
+                <MetricCard
+                  label="Typing Velocity"
+                  value={`${analysis?.metrics.typing_speed ?? 0}`}
+                  unit="WPM"
+                  icon={TrendingUp}
+                />
+                <MetricCard
+                  label="Error Density"
+                  value={`${((analysis?.metrics.error_rate ?? 0) * 100).toFixed(1)}`}
+                  unit="%"
+                  icon={AlertTriangle}
+                />
+                <MetricCard
+                  label="Idle Gap"
+                  value={`${analysis?.metrics.idle_time ?? 0}`}
+                  unit="%"
+                  icon={Minus}
+                />
+                <MetricCard
+                  label="Neural Delay"
+                  value={`${analysis?.metrics.reaction_delay ?? 0}`}
+                  unit="s"
+                  icon={Activity}
+                />
+              </div>
             </div>
 
-            {!isOnline && (
-              <div className="mt-4 flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-950/30 p-3 text-sm text-rose-100">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <p>
-                  Backend is unreachable at <span className="font-mono">{BACKEND_URL}</span>. Start the API server
-                  and keep CORS enabled.
-                </p>
-              </div>
-            )}
+            <div className="glass-card rounded-2xl p-6 border border-white/5 bg-white/5 backdrop-blur-xl">
+              <FocusChart data={history} />
+            </div>
           </div>
         </section>
-
-        <FocusChart data={history} />
       </div>
     </main>
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function MetricCard({ label, value, unit, icon: Icon }: { label: string; value: string; unit: string; icon: any }) {
   return (
-    <div className="metric-card rounded-xl p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="mt-1 font-mono text-lg text-cyan-200">{value}</p>
+    <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-white/5 p-4 hover:bg-white/[0.08] transition-colors">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</p>
+        <Icon className="w-3 h-3 text-slate-600" />
+      </div>
+      <div className="flex items-baseline gap-1">
+        <p className="text-2xl font-bold text-white font-mono">{value}</p>
+        <p className="text-[10px] text-slate-500 font-medium">{unit}</p>
+      </div>
     </div>
   );
 }
 
-function StatusPill({
-  icon: Icon,
-  label,
-  tone,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  tone: string;
-}) {
+function StatusPill({ icon: Icon, label, tone }: { icon: any; label: string; tone: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/55 px-3 py-1.5 text-slate-200">
-      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: tone }} />
-      <Icon className="h-3.5 w-3.5" />
+    <div className="flex items-center gap-2.5 rounded-full border border-white/5 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-300">
+      <span className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: tone }} />
+      <Icon className="h-4 w-4 opacity-70" />
       <span>{label}</span>
+    </div>
+  );
+}
+
+function TimelineStep({ time, label, status }: { time: string; label: string; status: 'complete' | 'warning' | 'pending' }) {
+  const dotColor = {
+    complete: 'bg-cyan-500',
+    warning: 'bg-rose-500',
+    pending: 'bg-slate-700'
+  }[status];
+
+  return (
+    <div className="flex items-start gap-4">
+      <div className="flex flex-col items-center gap-1 mt-1">
+        <div className={`h-2.5 w-2.5 rounded-full ${dotColor}`} />
+        <div className="h-8 w-px bg-slate-800" />
+      </div>
+      <div>
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{time}</p>
+        <p className={`text-xs font-medium ${status === 'warning' ? 'text-rose-400' : 'text-slate-300'}`}>{label}</p>
+      </div>
     </div>
   );
 }
