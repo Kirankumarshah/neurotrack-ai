@@ -237,6 +237,26 @@ def forecast_next_scores() -> dict:
     }
 
 
+from sqlalchemy import create_engine, Column, Float, String, DateTime, Integer
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import datetime
+
+# SQLite setup
+DB_PATH = os.path.join(os.path.dirname(__file__), 'history.db')
+engine = create_engine(f'sqlite:///{DB_PATH}')
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+class HistoryEntry(Base):
+    __tablename__ = "history"
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    focus_score = Column(Float)
+    risk_level = Column(String)
+
+Base.metadata.create_all(bind=engine)
+
 @app.on_event("startup")
 async def startup_event() -> None:
     global model_pipeline, model_meta
@@ -332,6 +352,20 @@ async def analyze_behavior(data: AnalyzeRequest) -> AnalyzeResponse:
             for point in session_history[-30:]
         ]
 
+        # Save to SQLite
+        db = SessionLocal()
+        try:
+            db_entry = HistoryEntry(
+                focus_score=focus_score,
+                risk_level=burnout_risk
+            )
+            db.add(db_entry)
+            db.commit()
+        except:
+            db.rollback()
+        finally:
+            db.close()
+
         return AnalyzeResponse(
             fatigue_probability=round(fatigue_probability, 4),
             focus_score=focus_score,
@@ -359,6 +393,21 @@ async def analyze_behavior(data: AnalyzeRequest) -> AnalyzeResponse:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+
+@app.get("/history")
+async def get_db_history():
+    db = SessionLocal()
+    try:
+        entries = db.query(HistoryEntry).order_by(HistoryEntry.timestamp.desc()).limit(50).all()
+        return [
+            {
+                "time": e.timestamp.strftime("%H:%M:%S"),
+                "score": e.focus_score,
+                "risk": e.risk_level
+            } for e in reversed(entries)
+        ]
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -31,62 +31,69 @@ body {
   font-family: var(--font-heading), "Segoe UI", sans-serif;
   color: var(--ink-0);
   background:
-    radial-gradient(720px 540px at 0% 0%, rgba(59, 130, 246, 0.23), transparent 58%),
-    radial-gradient(860px 580px at 100% -10%, rgba(16, 185, 129, 0.17), transparent 55%),
-    radial-gradient(420px 420px at 78% 76%, rgba(14, 165, 233, 0.14), transparent 62%),
-    linear-gradient(142deg, var(--bg-0), var(--bg-1) 36%, var(--bg-2) 72%, var(--bg-3));
+    --danger: #ef4444;
+  --neural-glow: rgba(6, 182, 212, 0.15);
 }
 
-.dashboard-shell {
-  position: relative;
-  overflow: hidden;
+@layer base {
+  body {
+    @apply bg-[var(--bg-space)] text-slate-200 antialiased overflow-x-hidden;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(6, 182, 212, 0.08) 0%, transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(59, 130, 246, 0.08) 0%, transparent 40%);
+  }
 }
 
-.dashboard-shell::before,
-.dashboard-shell::after {
-  content: "";
-  position: fixed;
-  pointer-events: none;
-  z-index: -1;
+@layer components {
+  .bento-grid {
+    @apply grid gap-6;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+
+  .world-card {
+    @apply relative overflow-hidden rounded-[2rem] border border-[var(--border-glass)] bg-[var(--panel-glass)] p-8 shadow-2xl backdrop-blur-2xl transition-all duration-500 hover:border-white/20;
+  }
+
+  .neural-pulse {
+    @apply animate-pulse;
+    animation: pulse-ring 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-ring {
+
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.5;
+    }
+
+    50% {
+      transform: scale(1.05);
+      opacity: 0.8;
+    }
+  }
+
+  .glass-button {
+    @apply rounded-xl border border-white/10 bg-white/5 px-6 py-3 font-semibold transition-all hover:bg-white/10 hover:border-white/20 active:scale-95;
+  }
 }
 
-.dashboard-shell::before {
-  inset: -12vmax;
-  background:
-    radial-gradient(circle at 15% 18%, rgba(56, 189, 248, 0.13), transparent 32%),
-    radial-gradient(circle at 88% 22%, rgba(16, 185, 129, 0.11), transparent 28%),
-    radial-gradient(circle at 72% 86%, rgba(59, 130, 246, 0.11), transparent 30%);
-  animation: floatClouds 20s ease-in-out infinite alternate;
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
 }
 
-.dashboard-shell::after {
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(148, 163, 184, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
-  background-size: 30px 30px;
-  mask-image: radial-gradient(circle at center, black 38%, transparent 90%);
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.glass-card {
-  background: linear-gradient(155deg, rgba(18, 31, 58, 0.66), var(--glass));
-  border: 1px solid var(--line);
-  box-shadow:
-    0 22px 56px rgba(2, 8, 24, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
 }
 
-.panel-title {
-  color: var(--ink-0);
-  letter-spacing: 0.02em;
-}
-
-.metric-card {
-  background: linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(30, 41, 59, 0.34));
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  transition: transform 260ms ease, border-color 260ms ease, background 260ms ease;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .metric-card:hover {
@@ -125,6 +132,7 @@ body {
   0% {
     transform: translate3d(0, 0, 0) scale(1);
   }
+
   100% {
     transform: translate3d(1.8%, -1.5%, 0) scale(1.04);
   }
@@ -135,10 +143,12 @@ body {
     transform: scale(0.7);
     opacity: 0.35;
   }
+
   70% {
     transform: scale(1.2);
     opacity: 0;
   }
+
   100% {
     transform: scale(1.2);
     opacity: 0;

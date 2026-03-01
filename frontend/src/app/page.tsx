@@ -1,22 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
+import { motion, Variants } from "framer-motion";
 import {
-  Activity,
-  AlertTriangle,
   Brain,
-  Clock,
-  Gauge,
   Sparkles,
-  TrendingUp,
   Wifi,
   WifiOff,
+  TrendingUp,
+  Minus,
   Zap,
+  History,
+  Activity
 } from "lucide-react";
 import { useBehaviorTracker } from "@/hooks/useBehaviorTracker";
 import FocusMeter from "@/components/FocusMeter";
 import FocusChart from "@/components/FocusChart";
+import NeuralFeed from "@/components/NeuralFeed";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -28,14 +29,9 @@ type AnalysisResponse = {
   recommendation: string;
   metrics: {
     typing_speed: number;
-    typing_variance: number;
     error_rate: number;
     idle_time: number;
     reaction_delay: number;
-    speed_drop_rate: number;
-    error_acceleration: number;
-    idle_spike_score: number;
-    focus_stability_index: number;
   };
   history: Array<{ time: string; score: number }>;
   forecast: {
@@ -43,6 +39,24 @@ type AnalysisResponse = {
     risk_direction: "up" | "down" | "stable";
     message: string;
   };
+};
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  show: {
+    opacity: 1,
+    y: 0
+  }
 };
 
 export default function Dashboard() {
@@ -53,6 +67,18 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<string>("--:--");
 
   useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const response = await axios.get<Array<{ time: string; score: number }>>(`${BACKEND_URL}/history`);
+        setHistory(response.data);
+      } catch (error) {
+        console.error("Failed to fetch history:", error);
+      }
+    };
+    void fetchHistory();
+  }, []);
+
+  useEffect(() => {
     if (!batch) return;
 
     const sendData = async () => {
@@ -61,11 +87,15 @@ export default function Dashboard() {
           timeout: 5000,
         });
 
-        setAnalysis(response.data);
-        setHistory(response.data.history ?? []);
         setIsOnline(true);
-        setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-      } catch {
+        setAnalysis(response.data);
+
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        setLastUpdated(timeStr);
+
+        setHistory((prev) => [...prev, { time: timeStr, score: response.data.focus_score }].slice(-15));
+      } catch (error) {
         setIsOnline(false);
       }
     };
@@ -73,173 +103,120 @@ export default function Dashboard() {
     void sendData();
   }, [batch]);
 
-  const riskTone = useMemo(() => {
-    const risk = analysis?.burnout_risk_level ?? "Low";
-    if (risk === "High") return "var(--danger)";
-    if (risk === "Medium") return "var(--warning)";
-    return "var(--success)";
-  }, [analysis]);
-
   return (
-    <main className="dashboard-shell min-h-screen bg-[#0a0c10] px-4 py-8 text-slate-200 md:px-8">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <header className="glass-card rounded-3xl p-6 md:p-7">
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="brand-orb grid h-14 w-14 place-items-center rounded-2xl">
-                <Brain className="h-8 w-8 text-white" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">NeuroTrack AI</h1>
-                <p className="mt-1 text-sm font-medium text-slate-300">Cognitive telemetry and fatigue prediction</p>
+    <main className="min-h-screen p-4 md:p-12 lg:p-16">
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="show"
+        className="mx-auto max-w-[1400px] space-y-10"
+      >
+        <motion.header variants={itemVariants} className="flex flex-wrap items-end justify-between gap-8 pb-4 border-b border-white/5">
+          <div className="flex items-center gap-6">
+            <div className="relative h-16 w-16">
+              <div className="absolute inset-0 bg-cyan-500 blur-2xl opacity-20 animate-pulse" />
+              <div className="relative grid h-full w-full place-items-center rounded-[1.5rem] bg-gradient-to-br from-cyan-400 to-blue-600 shadow-2xl">
+                <Brain className="h-9 w-9 text-white" />
               </div>
             </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <StatusPill
-                icon={isOnline ? Wifi : WifiOff}
-                label={isOnline ? "API Connected" : "API Offline"}
-                tone={isOnline ? "#34d399" : "#f43f5e"}
-              />
-              <StatusPill icon={Gauge} label={`Risk: ${analysis?.burnout_risk_level ?? "Low"}`} tone={riskTone} />
-              <div className="rounded-full border border-white/15 bg-slate-900/60 px-3 py-1.5 font-mono text-xs text-slate-400">
-                {lastUpdated}
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-4xl font-black tracking-tighter text-white">NEUROTRACK.AI</h1>
+                <div className="px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-bold text-cyan-500 tracking-widest uppercase">PRO v2</div>
               </div>
+              <p className="mt-1 text-slate-400 font-medium tracking-tight">Real-time biological cognitive workload monitor</p>
             </div>
           </div>
 
-          <div className="kpi-strip mt-5 grid gap-2 rounded-2xl p-2 md:grid-cols-4">
-            <KpiCard label="Focus" value={`${Math.round(analysis?.focus_score ?? 100)}%`} />
-            <KpiCard label="Typing" value={`${analysis?.metrics.typing_speed ?? 0} WPM`} />
-            <KpiCard label="Errors" value={`${((analysis?.metrics.error_rate ?? 0) * 100).toFixed(1)}%`} />
-            <KpiCard label="Stability" value={`${Math.round((analysis?.metrics.focus_stability_index ?? 0) * 100)}%`} />
+          <div className="flex items-center gap-4">
+            <StatusPill
+              icon={isOnline ? Wifi : WifiOff}
+              label={isOnline ? "LIVE FEED" : "API OFFLINE"}
+              tone={isOnline ? "var(--success)" : "var(--danger)"}
+            />
+            <div className="h-10 w-px bg-white/5 hidden md:block" />
+            <div className="text-right hidden sm:block">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Network Latency</p>
+              <p className="text-sm font-mono text-cyan-400">14ms</p>
+            </div>
           </div>
-        </header>
+        </motion.header>
 
-        <section className="grid gap-6 lg:grid-cols-[340px,1fr]">
-          <div className="space-y-6">
+        <div className="grid gap-6 grid-cols-1 md:grid-cols-12 lg:grid-rows-6 lg:h-[900px]">
+          <motion.div variants={itemVariants} className="md:col-span-12 lg:col-span-4 lg:row-span-6">
             <FocusMeter score={analysis?.focus_score ?? 100} risk={analysis?.burnout_risk_level ?? "Low"} />
+          </motion.div>
 
-            <div className="glass-card rounded-3xl p-6">
-              <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
-                <Clock className="h-3 w-3" /> Forecast Window
+          <motion.div variants={itemVariants} className="md:col-span-12 lg:col-span-8 lg:row-span-2 world-card bg-gradient-to-br from-slate-900/40 to-black/40">
+            <div className="flex items-center gap-2 mb-6 text-cyan-400">
+              <Sparkles className="w-5 h-5 fill-current" />
+              <h2 className="text-xs font-bold uppercase tracking-[0.2em]">Neural Recommendation</h2>
+            </div>
+            <p className="text-2xl font-bold text-slate-100 leading-snug">
+              {analysis?.recommendation ?? "Synchronizing with your neural patterns... Expect a calibrated focus index in the next session window."}
+            </p>
+
+            <div className="mt-8 flex gap-3">
+              <div className="px-4 py-2 rounded-full bg-white/5 border border-white/5 text-[10px] font-bold text-slate-400">#FOCUS_PRIORITY</div>
+              <div className="px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-bold text-cyan-500">SESSION_ACTIVE</div>
+            </div>
+          </motion.div>
+
+          <motion.div variants={itemVariants} className="md:col-span-6 lg:col-span-5 lg:row-span-2 grid grid-cols-2 gap-4">
+            <MetricCell label="TYPING VELOCITY" value={analysis?.metrics.typing_speed ?? 0} unit="WPM" icon={TrendingUp} />
+            <MetricCell label="ERROR DENSITY" value={((analysis?.metrics.error_rate ?? 0) * 100).toFixed(1)} unit="%" icon={Zap} />
+            <MetricCell label="IDLE WINDOW" value={analysis?.metrics.idle_time ?? 0} unit="%" icon={Minus} />
+            <MetricCell label="LATENCY" value={analysis?.metrics.reaction_delay ?? 0} unit="SEC" icon={Activity} />
+          </motion.div>
+
+          <motion.div variants={itemVariants} className="md:col-span-6 lg:col-span-3 lg:row-span-4">
+            <NeuralFeed batch={batch} />
+          </motion.div>
+
+          <motion.div variants={itemVariants} className="md:col-span-12 lg:col-span-5 lg:row-span-2 world-card">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2">
+                <History className="w-3 h-3" /> Focus Timeline
               </h3>
-              <p className="rounded-xl border border-cyan-300/20 bg-cyan-950/20 p-3 text-sm text-cyan-100">
-                {analysis?.forecast.message ?? "Gathering session context for prediction..."}
-              </p>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {(analysis?.forecast.next_scores ?? [100, 100, 100]).map((score, index) => (
-                  <div key={index} className="metric-card rounded-xl p-2 text-center">
-                    <p className="text-[10px] uppercase tracking-wider text-slate-400">+{(index + 1) * 10}s</p>
-                    <p className="font-mono text-lg font-semibold text-white">{Math.round(score)}%</p>
-                  </div>
-                ))}
+              <div className="flex items-center gap-2 text-[10px] font-mono text-cyan-500">
+                <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
+                RECORDING_LIVE
               </div>
             </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="glass-card relative overflow-hidden rounded-3xl p-6">
-              <div className="absolute right-0 top-0 p-8 opacity-10">
-                <Sparkles className="h-24 w-24" />
-              </div>
-
-              <h2 className="panel-title flex items-center gap-2 text-xl font-bold">
-                <Zap className="h-5 w-5 fill-amber-300 text-amber-300" /> Live AI Guidance
-              </h2>
-              <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-200">
-                {analysis?.recommendation ?? "Analyzing behavior stream. Insights refresh every 10 seconds."}
-              </p>
-
-              <div className="mt-7 grid grid-cols-2 gap-4 md:grid-cols-4">
-                <MetricCard label="Typing Speed" value={`${analysis?.metrics.typing_speed ?? 0}`} unit="WPM" icon={TrendingUp} />
-                <MetricCard label="Error Rate" value={`${((analysis?.metrics.error_rate ?? 0) * 100).toFixed(1)}`} unit="%" icon={AlertTriangle} />
-                <MetricCard label="Idle Time" value={`${analysis?.metrics.idle_time ?? 0}`} unit="%" icon={Activity} />
-                <MetricCard label="Reaction" value={`${analysis?.metrics.reaction_delay ?? 0}`} unit="s" icon={Clock} />
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <Chip label="Speed Drop" value={`${Math.round((analysis?.metrics.speed_drop_rate ?? 0) * 100)}%`} />
-                <Chip label="Error Accel" value={`${Math.round((analysis?.metrics.error_acceleration ?? 0) * 100)}%`} />
-                <Chip label="Idle Spikes" value={`${Math.round((analysis?.metrics.idle_spike_score ?? 0) * 100)}%`} />
-                <Chip label="Stability" value={`${Math.round((analysis?.metrics.focus_stability_index ?? 0) * 100)}%`} />
-              </div>
-
-              {!isOnline && (
-                <div className="mt-4 flex items-start gap-2 rounded-xl border border-rose-400/40 bg-rose-950/30 p-3 text-sm text-rose-100">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <p>
-                    Backend unreachable at <span className="font-mono">{BACKEND_URL}</span>. Start API first.
-                  </p>
-                </div>
-              )}
+            <div className="h-[140px]">
+              <FocusChart data={history} />
             </div>
-
-            <FocusChart data={history} />
-          </div>
-        </section>
-      </div>
+          </motion.div>
+        </div>
+      </motion.div>
     </main>
   );
 }
 
-function KpiCard({ label, value }: { label: string; value: string }) {
+function MetricCell({ label, value, unit, icon: Icon }: any) {
   return (
-    <div className="rounded-xl border border-white/10 bg-slate-950/35 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">{label}</p>
-      <p className="mt-0.5 text-sm font-semibold text-slate-100">{value}</p>
-    </div>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  unit,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  unit: string;
-  icon: ComponentType<{ className?: string }>;
-}) {
-  return (
-    <div className="metric-card rounded-2xl p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">{label}</p>
-        <Icon className="h-3.5 w-3.5 text-slate-400" />
+    <div className="world-card p-6 flex flex-col justify-between group">
+      <div className="flex items-center justify-between opacity-40 group-hover:opacity-100 transition-opacity">
+        <p className="text-[10px] font-bold uppercase tracking-widest">{label}</p>
+        <Icon className="w-4 h-4" />
       </div>
-      <div className="flex items-baseline gap-1">
-        <p className="font-mono text-2xl font-bold text-white">{value}</p>
-        <p className="text-[10px] text-slate-400">{unit}</p>
+      <div className="mt-4 flex items-baseline gap-2">
+        <span className="text-3xl font-black text-white font-mono">{value}</span>
+        <span className="text-xs font-bold text-slate-600">{unit}</span>
       </div>
     </div>
   );
 }
 
-function StatusPill({
-  icon: Icon,
-  label,
-  tone,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  tone: string;
-}) {
+function StatusPill({ icon: Icon, label, tone }: any) {
   return (
-    <div className="flex items-center gap-2 rounded-full border border-white/15 bg-slate-900/55 px-3 py-1.5 text-xs font-medium text-slate-100">
-      <span className="sparkline-dot h-2 w-2 rounded-full" style={{ backgroundColor: tone, color: tone }} />
-      <Icon className="h-3.5 w-3.5 opacity-80" />
-      <span>{label}</span>
-    </div>
-  );
-}
-
-function Chip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-white/12 bg-slate-900/35 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-100">{value}</p>
+    <div className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/5 py-2.5 px-5 text-xs font-bold text-slate-300">
+      <div className="h-2 w-2 rounded-full relative">
+        <div className="absolute inset-0 rounded-full animate-ping opacity-75" style={{ backgroundColor: tone }} />
+        <div className="relative h-2 w-2 rounded-full" style={{ backgroundColor: tone }} />
+      </div>
+      <Icon className="h-4 w-4 opacity-50" />
+      <span className="tracking-widest">{label}</span>
     </div>
   );
 }
