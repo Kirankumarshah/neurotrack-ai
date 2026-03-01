@@ -1,25 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import axios from "axios";
-import { motion, Variants } from "framer-motion";
+import { useEffect, useState, useMemo } from "react";
+import { motion, Variants, AnimatePresence } from "framer-motion";
 import {
   Brain,
   Sparkles,
   Wifi,
   WifiOff,
-  TrendingUp,
-  Minus,
-  Zap,
   History,
-  Activity
+  Activity,
+  AlertCircle
 } from "lucide-react";
+
 import { useBehaviorTracker } from "@/hooks/useBehaviorTracker";
 import FocusMeter from "@/components/FocusMeter";
 import FocusChart from "@/components/FocusChart";
 import NeuralFeed from "@/components/NeuralFeed";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Production-ready modular components
+import { MetricCard } from "@/components/ui/MetricCard";
+import { StatusPill } from "@/components/ui/StatusPill";
+import { DashboardSkeleton } from "@/components/ui/Skeleton";
+import api from "@/lib/api";
+
+type XAIContributor = {
+  feature: string;
+  impact: string;
+  reason: string;
+};
 
 type AnalysisResponse = {
   fatigue_probability: number;
@@ -39,24 +47,20 @@ type AnalysisResponse = {
     risk_direction: "up" | "down" | "stable";
     message: string;
   };
+  contributors: XAIContributor[];
 };
 
 const containerVariants: Variants = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    transition: {
-      staggerChildren: 0.1
-    }
+    transition: { staggerChildren: 0.1 }
   }
 };
 
 const itemVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
-  show: {
-    opacity: 1,
-    y: 0
-  }
+  show: { opacity: 1, y: 0 }
 };
 
 export default function Dashboard() {
@@ -64,44 +68,51 @@ export default function Dashboard() {
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
   const [history, setHistory] = useState<Array<{ time: string; score: number }>>([]);
   const [isOnline, setIsOnline] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string>("--:--");
 
+  // Initial History Fetch
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const response = await axios.get<Array<{ time: string; score: number }>>(`${BACKEND_URL}/history`);
-        setHistory(response.data);
-      } catch (error) {
-        console.error("Failed to fetch history:", error);
+        const res = await api.get<Array<{ time: string; score: number; risk: string }>>("/history");
+        setHistory(res.data.map(h => ({ time: h.time, score: h.score })));
+      } catch (err) {
+        console.error("History fetch failed:", err);
+      } finally {
+        setIsLoading(false);
       }
     };
     void fetchHistory();
   }, []);
 
+  // Real-time Data Sync
   useEffect(() => {
     if (!batch) return;
 
-    const sendData = async () => {
+    const streamData = async () => {
       try {
-        const response = await axios.post<AnalysisResponse>(`${BACKEND_URL}/analyze`, batch, {
-          timeout: 5000,
-        });
-
+        const res = await api.post<AnalysisResponse>("/analyze", batch);
         setIsOnline(true);
-        setAnalysis(response.data);
+        setAnalysis(res.data);
 
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        setLastUpdated(timeStr);
-
-        setHistory((prev) => [...prev, { time: timeStr, score: response.data.focus_score }].slice(-15));
-      } catch (error) {
+        const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        setLastUpdated(now);
+        setHistory(prev => [...prev, { time: now, score: res.data.focus_score }].slice(-15));
+      } catch (err) {
         setIsOnline(false);
       }
     };
-
-    void sendData();
+    void streamData();
   }, [batch]);
+
+  if (isLoading && !analysis) {
+    return (
+      <main className="min-h-screen p-4 md:p-12 lg:p-16">
+        <DashboardSkeleton />
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-screen p-4 md:p-12 lg:p-16">
@@ -122,9 +133,9 @@ export default function Dashboard() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-4xl font-black tracking-tighter text-white">NEUROTRACK.AI</h1>
-                <div className="px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-bold text-cyan-500 tracking-widest uppercase">PRO v2</div>
+                <div className="px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-bold text-cyan-500 tracking-widest uppercase font-mono">CORE v3.0</div>
               </div>
-              <p className="mt-1 text-slate-400 font-medium tracking-tight">Real-time biological cognitive workload monitor</p>
+              <p className="mt-1 text-slate-400 font-medium tracking-tight">Explainable Cognitive Analytics Engine</p>
             </div>
           </div>
 
@@ -132,56 +143,77 @@ export default function Dashboard() {
             <StatusPill
               icon={isOnline ? Wifi : WifiOff}
               label={isOnline ? "LIVE FEED" : "API OFFLINE"}
-              tone={isOnline ? "var(--success)" : "var(--danger)"}
+              tone={isOnline ? "#06b6d4" : "#ef4444"}
             />
             <div className="h-10 w-px bg-white/5 hidden md:block" />
             <div className="text-right hidden sm:block">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Network Latency</p>
-              <p className="text-sm font-mono text-cyan-400">14ms</p>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Last Update</p>
+              <p className="text-sm font-mono text-cyan-400">{lastUpdated}</p>
             </div>
           </div>
         </motion.header>
 
         <div className="grid gap-6 grid-cols-1 md:grid-cols-12 lg:grid-rows-6 lg:h-[900px]">
+          {/* Main Focus Gauge */}
           <motion.div variants={itemVariants} className="md:col-span-12 lg:col-span-4 lg:row-span-6">
             <FocusMeter score={analysis?.focus_score ?? 100} risk={analysis?.burnout_risk_level ?? "Low"} />
           </motion.div>
 
-          <motion.div variants={itemVariants} className="md:col-span-12 lg:col-span-8 lg:row-span-2 world-card bg-gradient-to-br from-slate-900/40 to-black/40">
-            <div className="flex items-center gap-2 mb-6 text-cyan-400">
-              <Sparkles className="w-5 h-5 fill-current" />
-              <h2 className="text-xs font-bold uppercase tracking-[0.2em]">Neural Recommendation</h2>
+          {/* XAI Insights Card */}
+          <motion.div variants={itemVariants} className="md:col-span-12 lg:col-span-8 lg:row-span-2 world-card bg-gradient-to-br from-slate-900/60 to-black/60 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
+              <Sparkles className="w-24 h-24 text-cyan-400" />
             </div>
-            <p className="text-2xl font-bold text-slate-100 leading-snug">
-              {analysis?.recommendation ?? "Synchronizing with your neural patterns... Expect a calibrated focus index in the next session window."}
-            </p>
 
-            <div className="mt-8 flex gap-3">
-              <div className="px-4 py-2 rounded-full bg-white/5 border border-white/5 text-[10px] font-bold text-slate-400">#FOCUS_PRIORITY</div>
-              <div className="px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-bold text-cyan-500">SESSION_ACTIVE</div>
+            <div className="flex flex-col md:flex-row gap-8">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-4 text-cyan-400">
+                  <Activity className="w-4 h-4" />
+                  <h2 className="text-xs font-bold uppercase tracking-[0.2em]">Neural Recommendation</h2>
+                </div>
+                <p className="text-2xl font-bold text-slate-100 leading-tight mb-6">
+                  {analysis?.recommendation ?? "Calibrating neural sensors... Data stream is initializing."}
+                </p>
+              </div>
+
+              <div className="w-full md:w-64 border-l border-white/5 pl-0 md:pl-8">
+                <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Focus Contributors</h3>
+                <div className="space-y-3">
+                  {analysis?.contributors.map((c, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <div className={`mt-1 w-1.5 h-1.5 rounded-full ${c.impact === 'High' ? 'bg-red-500' : 'bg-cyan-500'}`} />
+                      <div>
+                        <p className="text-[11px] font-bold text-slate-200">{c.feature}</p>
+                        <p className="text-[10px] text-slate-500 leading-tight">{c.reason}</p>
+                      </div>
+                    </div>
+                  )) || (
+                      <div className="text-[10px] italic text-slate-600">Gathering cognitive telemetry...</div>
+                    )}
+                </div>
+              </div>
             </div>
           </motion.div>
 
+          {/* Metric Grid */}
           <motion.div variants={itemVariants} className="md:col-span-6 lg:col-span-5 lg:row-span-2 grid grid-cols-2 gap-4">
-            <MetricCell label="TYPING VELOCITY" value={analysis?.metrics.typing_speed ?? 0} unit="WPM" icon={TrendingUp} />
-            <MetricCell label="ERROR DENSITY" value={((analysis?.metrics.error_rate ?? 0) * 100).toFixed(1)} unit="%" icon={Zap} />
-            <MetricCell label="IDLE WINDOW" value={analysis?.metrics.idle_time ?? 0} unit="%" icon={Minus} />
-            <MetricCell label="LATENCY" value={analysis?.metrics.reaction_delay ?? 0} unit="SEC" icon={Activity} />
+            <MetricCard label="Velocity" value={analysis?.metrics.typing_speed ?? 0} unit="WPM" icon={Activity} />
+            <MetricCard label="Accuracy" value={((analysis?.metrics.error_rate ?? 0) * 100).toFixed(1)} unit="%" icon={AlertCircle} />
+            <MetricCard label="Downtime" value={analysis?.metrics.idle_time ?? 0} unit="%" icon={History} />
+            <MetricCard label="Latency" value={analysis?.metrics.reaction_delay ?? 0} unit="SEC" icon={Brain} />
           </motion.div>
 
+          {/* Feed Component */}
           <motion.div variants={itemVariants} className="md:col-span-6 lg:col-span-3 lg:row-span-4">
             <NeuralFeed batch={batch} />
           </motion.div>
 
+          {/* Timeline Component */}
           <motion.div variants={itemVariants} className="md:col-span-12 lg:col-span-5 lg:row-span-2 world-card">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2">
-                <History className="w-3 h-3" /> Focus Timeline
+                <History className="w-3 h-3" /> Cognitive Timeline
               </h3>
-              <div className="flex items-center gap-2 text-[10px] font-mono text-cyan-500">
-                <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
-                RECORDING_LIVE
-              </div>
             </div>
             <div className="h-[140px]">
               <FocusChart data={history} />
@@ -190,33 +222,5 @@ export default function Dashboard() {
         </div>
       </motion.div>
     </main>
-  );
-}
-
-function MetricCell({ label, value, unit, icon: Icon }: any) {
-  return (
-    <div className="world-card p-6 flex flex-col justify-between group">
-      <div className="flex items-center justify-between opacity-40 group-hover:opacity-100 transition-opacity">
-        <p className="text-[10px] font-bold uppercase tracking-widest">{label}</p>
-        <Icon className="w-4 h-4" />
-      </div>
-      <div className="mt-4 flex items-baseline gap-2">
-        <span className="text-3xl font-black text-white font-mono">{value}</span>
-        <span className="text-xs font-bold text-slate-600">{unit}</span>
-      </div>
-    </div>
-  );
-}
-
-function StatusPill({ icon: Icon, label, tone }: any) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/5 py-2.5 px-5 text-xs font-bold text-slate-300">
-      <div className="h-2 w-2 rounded-full relative">
-        <div className="absolute inset-0 rounded-full animate-ping opacity-75" style={{ backgroundColor: tone }} />
-        <div className="relative h-2 w-2 rounded-full" style={{ backgroundColor: tone }} />
-      </div>
-      <Icon className="h-4 w-4 opacity-50" />
-      <span className="tracking-widest">{label}</span>
-    </div>
   );
 }
