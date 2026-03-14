@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core import utils
 from app.core.database import get_db
-from app.models.schemas import AnalyzeRequest, AnalyzeResponse, HistoryPoint, Forecast, DashboardMetrics, HistoryEntry
+from app.models.schemas import AnalyzeRequest, AnalyzeResponse, HistoryPoint, Forecast, DashboardMetrics, HistoryEntry, AIReport
 from app.services import feature_service, ml_service, analytics_service
 
 router = APIRouter()
@@ -30,21 +30,40 @@ async def analyze_behavior(data: AnalyzeRequest, db: Session = Depends(get_db)):
         db.add(db_entry)
         db.commit()
         
+        global session_history
+        session_history.append({"prob": prob, "score": score})
+        if len(session_history) > 100:
+            session_history.pop(0)
+            
         # 5. Session Analytics
         forecast = analytics_service.forecast_next_scores([]) # Session history logic would go here
-        trend = analytics_service.get_trend([])
+        trend = analytics_service.get_trend(session_history)
         recommendation = utils.get_recommendation(prob)
+        
+        # 6. Burnout & NeuroScore
+        neuro_score = score
+        is_burnout, break_rec = analytics_service.check_burnout(session_history, prob)
+        
+        ai_focus_report = AIReport(
+            focus_score=neuro_score,
+            fatigue_risk=risk,
+            typing_stability="Good" if features.get("typing_variance", 0) < 100 else "Poor",
+            recommended_break=break_rec
+        )
         
         return AnalyzeResponse(
             fatigue_probability=round(prob, 4),
             focus_score=score,
+            neuro_score=neuro_score,
             burnout_risk_level=risk,
             burnout_trend=trend,
+            burnout_alert=is_burnout,
             recommendation=recommendation,
             metrics=DashboardMetrics(**{k: round(v, 2) for k, v in features.items()}),
             history=[], 
             forecast=forecast,
-            contributors=contributors
+            contributors=contributors,
+            ai_focus_report=ai_focus_report
         )
     except Exception as e:
         db.rollback()

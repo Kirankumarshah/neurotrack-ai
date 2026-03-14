@@ -48,13 +48,22 @@ class AnalyzeRequest(BaseModel):
     durationMs: float
     startTime: float
 
+class AIReport(BaseModel):
+    focus_score: float
+    fatigue_risk: str
+    typing_stability: str
+    recommended_break: str
+
 class AnalyzeResponse(BaseModel):
     fatigue_probability: float
     focus_score: float
+    neuro_score: float
     burnout_risk_level: str
     burnout_trend: Literal["Improving", "Declining", "Stable"]
+    burnout_alert: bool
     recommendation: str
     metrics: DashboardMetrics
     history: List[HistoryPoint]
     forecast: Forecast
     contributors: List[XAIContributor] # New XAI field
+    ai_focus_report: AIReport

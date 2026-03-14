@@ -29,11 +29,20 @@ type XAIContributor = {
   reason: string;
 };
 
+type AIReport = {
+  focus_score: number;
+  fatigue_risk: string;
+  typing_stability: string;
+  recommended_break: string;
+};
+
 type AnalysisResponse = {
   fatigue_probability: number;
   focus_score: number;
+  neuro_score: number;
   burnout_risk_level: "Low" | "Medium" | "High";
   burnout_trend: "Improving" | "Declining" | "Stable";
+  burnout_alert: boolean;
   recommendation: string;
   metrics: {
     typing_speed: number;
@@ -48,6 +57,7 @@ type AnalysisResponse = {
     message: string;
   };
   contributors: XAIContributor[];
+  ai_focus_report: AIReport;
 };
 
 const containerVariants: Variants = {
@@ -135,7 +145,7 @@ export default function Dashboard() {
                 <h1 className="text-4xl font-black tracking-tighter text-white">NEUROTRACK.AI</h1>
                 <div className="px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-bold text-cyan-500 tracking-widest uppercase font-mono">CORE v3.0</div>
               </div>
-              <p className="mt-1 text-slate-400 font-medium tracking-tight">Explainable Cognitive Analytics Engine</p>
+              <p className="mt-1 text-slate-400 font-medium tracking-tight">Real-Time NeuroScore Dashboard & Burnout Predictor</p>
             </div>
           </div>
 
@@ -154,9 +164,34 @@ export default function Dashboard() {
         </motion.header>
 
         <div className="grid gap-6 grid-cols-1 md:grid-cols-12 lg:grid-rows-6 lg:h-[900px]">
+          
+          {/* Burnout Alert Banner */}
+          <AnimatePresence>
+            {analysis?.burnout_alert && (
+              <motion.div 
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="md:col-span-12 w-full bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-center justify-between shadow-[0_0_30px_rgba(239,68,68,0.15)]"
+              >
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="w-6 h-6 text-red-500 animate-pulse" />
+                  <div>
+                    <h3 className="text-sm font-bold text-red-400 uppercase tracking-widest">Burnout Risk Alert</h3>
+                    <p className="text-xs text-red-200/70">Sustained high cognitive fatigue detected.</p>
+                  </div>
+                </div>
+                <div className="px-4 py-2 bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg border border-red-400 font-mono tracking-widest uppercase">
+                   {analysis.ai_focus_report?.recommended_break || "TAKE A BREAK"}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Main Focus Gauge */}
-          <motion.div variants={itemVariants} className="md:col-span-12 lg:col-span-4 lg:row-span-6">
-            <FocusMeter score={analysis?.focus_score ?? 100} risk={analysis?.burnout_risk_level ?? "Low"} />
+          <motion.div variants={itemVariants} className="md:col-span-12 lg:col-span-4 lg:row-span-6 relative">
+            <h2 className="absolute top-8 left-8 z-20 text-[10px] uppercase font-bold tracking-widest text-[#06b6d4]">AI Cognitive Focus Meter</h2>
+            <FocusMeter score={analysis?.neuro_score ?? 100} risk={analysis?.burnout_risk_level ?? "Low"} />
           </motion.div>
 
           {/* XAI Insights Card */}
@@ -169,11 +204,24 @@ export default function Dashboard() {
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-4 text-cyan-400">
                   <Activity className="w-4 h-4" />
-                  <h2 className="text-xs font-bold uppercase tracking-[0.2em]">Neural Recommendation</h2>
+                  <h2 className="text-xs font-bold uppercase tracking-[0.2em]">AI Focus Report</h2>
                 </div>
-                <p className="text-2xl font-bold text-slate-100 leading-tight mb-6">
-                  {analysis?.recommendation ?? "Calibrating neural sensors... Data stream is initializing."}
-                </p>
+                
+                {analysis?.ai_focus_report ? (
+                  <div className="space-y-4 mb-6">
+                    <p className="text-xl font-bold text-slate-100 leading-tight">
+                      NeuroScore: <span className="text-cyan-400">{analysis.ai_focus_report.focus_score}</span> | Risk: <span className={analysis.ai_focus_report.fatigue_risk === 'High' ? 'text-red-400' : 'text-emerald-400'}>{analysis.ai_focus_report.fatigue_risk}</span>
+                    </p>
+                    <div className="flex flex-wrap gap-2 text-[11px] font-mono tracking-widest uppercase text-slate-400">
+                        <span className="px-2 py-1 bg-white/5 border border-white/10 rounded-md">Stability: {analysis.ai_focus_report.typing_stability}</span>
+                        <span className="px-2 py-1 bg-white/5 border border-white/10 rounded-md text-cyan-500 border-cyan-500/20">{analysis.ai_focus_report.recommended_break}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-2xl font-bold text-slate-100 leading-tight mb-6">
+                    Calibrating AI Model... Gathering Behavioral Data.
+                  </p>
+                )}
               </div>
 
               <div className="w-full md:w-64 border-l border-white/5 pl-0 md:pl-8">
