@@ -89,8 +89,7 @@ npm install
 npm run dev
 ```
 
-### 3. Usage
-Navigate to `http://localhost:3000`. The system will automatically begin simulating/capturing telemetry, and the AI Focus Meter will calibrate in real-time!
+
 
 ---
 
